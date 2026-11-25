@@ -1,6 +1,8 @@
 import os
 from celery import Celery
 
+from app.routing import route_task
+
 BROKER = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
 
@@ -12,5 +14,5 @@ app = Celery(
 )
 
 app.conf.task_track_started = True
-
 app.conf.task_default_queue = 'celery'
+app.conf.task_routes = (route_task,)

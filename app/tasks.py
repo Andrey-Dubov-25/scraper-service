@@ -2,6 +2,7 @@ from app.celery_app import app
 
 
 @app.task
-def ping() -> str:
-    """Проверочная задача: убедиться, что воркер жив и видит задачи."""
-    return 'pong'
+def scrape_url(url: str) -> dict:
+    """Заглушка. Реальный HTTP-парсинг - на шаге 3."""
+    print(f'--- scrape_url: получен {url} ---')
+    return {'url': url, 'status': 'stub'}
