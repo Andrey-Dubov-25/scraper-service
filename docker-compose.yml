@@ -55,6 +55,9 @@ services:
     <<: *worker-common
     command: celery -A app.celery_app worker --loglevel=info --concurrency=1 -Q scrape_books_toscrape_com -n worker-books@%h
   
+  worker-default:
+    <<: *worker-common
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=1 -Q celery -n worker-default@%h
   flower:
     build: .
     command: celery -A app.celery_app flower --port=5555
