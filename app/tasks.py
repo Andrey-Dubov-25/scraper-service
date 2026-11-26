@@ -3,25 +3,20 @@ import re
 from datetime import datetime, timezone
 
 import httpx
+from urllib.parse import urlparse
 
 from app.celery_app import app
-
+from app.rate_limit import wait_for_slot
 
 logger = logging.getLogger(__name__)
 
 TITLE_RE = re.compile(r'<title[^>]*>(.*?)</title>', re.IGNORECASE | re.DOTALL)
-
 USER_AGENT = 'ScraperService/1.0 (+https://example.local)'
 
 
-@app.task
-def scrape_url(url: str) -> dict:
-    """
-    Реально идёт в интернет и достаёт <title>.
-    Ошибки сети/таймаута не валят задачу — возвращаем {'error': ...}.
-    Ретраи сюда добавим на шаге 5.
-    """
-    logger.info('scrape_url: fetching %s', url)
+def _scrape(url: str) -> dict:
+    """Общая логика парсинга — используется двумя тасками ниже."""
+    logger.info('scrape: fetching %s', url)
     started_at = datetime.now(timezone.utc)
 
     try:
@@ -32,7 +27,7 @@ def scrape_url(url: str) -> dict:
         ) as client:
             response = client.get(url)
     except httpx.HTTPError as exc:
-        logger.warning('scrape_url: network error for %s: %s', url, exc)
+        logger.warning('scrape: network error for %s: %s', url, exc)
         return {
             'url': url,
             'error': f'{type(exc).__name__}: {exc}',
@@ -48,7 +43,7 @@ def scrape_url(url: str) -> dict:
             title = match.group(1).strip()
 
     logger.info(
-        'scrape_url: %s -> %s (title=%r, %dms)',
+        'scrape: %s -> %s (title=%r, %dms)',
         url, response.status_code, title, elapsed_ms,
     )
 
@@ -61,3 +56,14 @@ def scrape_url(url: str) -> dict:
         'elapsed_ms': elapsed_ms,
         'fetched_at': started_at.isoformat(),
     }
+
+
+@app.task
+def scrape_url(url: str) -> dict:
+    """Боевая задача с pre-domain rate limit через Redis."""
+    domain = (urlparse(url).hostname or '').lower()
+    if domain.startswith('www.'):
+        domain = domain[4:]
+
+    wait_for_slot(domain, min_interval=2.0)
+    return _scrape(url)
